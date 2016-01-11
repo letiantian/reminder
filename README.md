@@ -1,13 +1,14 @@
 # reminder
 
-**reminder** is a tool to show messages at specified time. It depends on  notification tool in user's Linux Desktop edition. For example, for `Cinnamon` `notify-send` is used to show notifications.
+**reminder** is a command to show messages at specified time by Tkinter. It can be used as a todo app.
 
 The data are stored in `~/.reminder/`.
-
 
 ## Install
 
 ```
+$ sudo apt-get install python-tk
+$ supported pip install setproctitle
 $ sudo make install
 ```
 
@@ -34,12 +35,22 @@ $ reminder --stop
 
 #### notify after 12s
 ```
-$ reminder --after 12s "notify...."
+$ reminder --after 12s -m "notify...."
 ```
 
 #### notify at 13 o'clock
 ```
-$ reminder --when 13h0m0s "notify...."
+$ reminder --when 13h0m0s -m "notify...."
+```
+
+#### show all todo items
+```
+$ reminder --list
+```
+
+#### show history
+```
+$ reminder --history
 ```
 
 ## Test
@@ -51,10 +62,6 @@ $ python -m unittest reminder_test
 ## Todo
 Be compatible with python 3.
 
-## Contributing
-`reminder` need many improvements.
-
-For example, currently, only `Cinnamon` is supported. More Desktops need to be supported. Please feel free to modify the function `notify`.
 
 ## License
 MIT

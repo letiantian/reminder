@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from __future__ import print_function
+from __future__ import (print_function, unicode_literals)
 
 import atexit
 import os
@@ -14,6 +14,60 @@ import thread
 import argparse
 import re
 import datetime
+import Tkinter
+
+try:
+    reload(sys)
+    sys.setdefaultencoding('utf-8')
+except:
+    pass
+
+#
+# config
+# 
+CONFIG = {
+    'repeat'  : 1,
+    'dir'     : os.getenv('HOME') + '/.reminder',
+    'pidfile' : 'reminder.pid',
+    'dbfile'  : 'reminder.db',
+    'sleep'   : 40,
+    'interval': 60
+}
+
+HISTORY = 'history'
+ITEMS   = 'items'
+
+PY2 = sys.version_info[0] == 2
+if not PY2:
+    # Python 3.x and up
+    xrange = range
+
+    def as_text(v):  ## 生成unicode字符串
+        if v is None:
+            return None
+        elif isinstance(v, bytes):
+            return v.decode('utf-8', errors='ignore')
+        elif isinstance(v, str):
+            return v
+        else:
+            raise ValueError('Unknown type %r' % type(v))
+
+
+else:
+    # Python 2.x
+    xrange = xrange
+
+    def as_text(v):
+        if v is None:
+            return None
+        elif isinstance(v, unicode):
+            return v
+        elif isinstance(v, str):
+            return v.decode('utf-8', errors='ignore')
+        else:
+            raise ValueError('Invalid type %r' % type(v))
+
+
 
 #
 # Daemon class
@@ -220,20 +274,124 @@ class Daemon(object):
 # end of Daemon class
 #
 
-#
-# config
-# 
-CONFIG = {
-    'repeat'  : 3,
-    'dir'     : os.getenv('HOME') + '/.reminder',
-    'pidfile' : 'reminder.pid',
-    'dbfile'  : 'reminder.db',
-    'sleep'   : 40,
-    'interval': 60
-}
 
-HISTORY = 'history'
-ITEMS   = 'items'
+class DB(object):
+
+    @staticmethod
+    def create_table(conn):
+        """ Create table """
+        items_sql = '''
+        CREATE TABLE IF NOT EXISTS items(
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            whento   INTEGER,
+            msg      TEXT,
+            repeat   INTEGER
+        );
+        '''
+
+        history_sql = '''
+        CREATE TABLE IF NOT EXISTS history(
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            whento   INTEGER,
+            msg      TEXT,
+            repeat   INTEGER
+        );
+        '''
+        
+        cur = conn.cursor()    
+        cur.execute(items_sql)
+        cur.execute(history_sql)
+        
+        conn.commit() 
+
+
+    @staticmethod
+    def insert(conn, table, when, msg, repeat):
+        """ insert data into a table """
+        sql = "INSERT INTO {0}(whento, msg, repeat) VALUES (?,?,?)".format(table)
+            
+        cur = conn.cursor()    
+        cur.execute(sql, (when, msg, repeat))
+        
+        conn.commit()         
+
+
+    @staticmethod
+    def select_one(conn):
+        """ """
+        sql = "SELECT id, whento, msg, repeat FROM {0} ORDER BY whento LIMIT 1".format(ITEMS)     
+        cur = conn.cursor()    
+        cur.execute(sql)
+
+        return cur.fetchone()     # 若无数据，返回None，否则返回一个元组            
+            
+
+    @staticmethod
+    def show_all(conn, table):
+        """ """
+        sql = "SELECT whento, msg FROM {0} ORDER BY whento".format(table)        
+        cur = conn.cursor()    
+        for row in cur.execute(sql):
+            print(row)
+
+    @staticmethod
+    def clean_all(conn, table):
+        """ Clean outdated data """
+        timepoint = date2int( datetime.datetime.now() ) - CONFIG['sleep']*3
+        items_sql = 'DELETE FROM {0} WHERE whento < ?'.format(ITEMS)
+        history_sql = 'DELETE FROM {0}'.format(HISTORY)
+        cur = conn.cursor()
+        cur.execute(items_sql, (timepoint,))
+        cur.execute(history_sql)
+        conn.commit()
+
+
+    @staticmethod
+    def delete(conn, table, item_id):
+        """ Delete data by id """
+        sql = 'DELETE FROM {0} WHERE id=?'.format(table)
+        cur = conn.cursor()    
+        cur.execute(sql, (item_id,))
+        conn.commit()        
+
+
+    @staticmethod
+    def move(conn, item_id, when, msg, repeat):
+        """ Move data from ITEMS to HISTORY """
+        DB.insert(conn, HISTORY, when, msg, repeat)
+        DB.delete(conn, ITEMS, item_id)
+
+
+class ReminderDaemon(Daemon):
+    def run(self):
+        prepare()
+        conn = get_conn()
+        DB.create_table( conn )
+        try:
+            import setproctitle
+            setproctitle.setproctitle('reminder daemon')
+        except:
+            pass
+
+        while True:
+            item = DB.select_one(conn)
+            if item:
+                item_id, when, msg, repeat = item
+                
+                now = datetime.datetime.now()
+                now = date2int(now)
+
+                if now >= when:  
+                    notify(msg, repeat)
+                    DB.move(conn, item_id, when, msg, repeat)
+
+            time.sleep(CONFIG['sleep'])
+
+
+def prepare():
+    """ """
+    if not os.path.exists(CONFIG['dir']):
+        os.makedirs(CONFIG['dir'])
 
 def parse_arguments(*arg):
     """
@@ -241,7 +399,7 @@ def parse_arguments(*arg):
     --stop
     --restart
     --time  13h24m23s
-    --after 13h
+    --after 360s
     --repeat 4
     """
     parser = argparse.ArgumentParser()
@@ -254,15 +412,26 @@ def parse_arguments(*arg):
     parser.add_argument("--restart", 
                         help="Restart daemon", 
                         action="store_true")
+    
+    parser.add_argument("--list", 
+                        help="List all items", 
+                        action="store_true")
+    parser.add_argument("--history", 
+                        help="List all history", 
+                        action="store_true")
+    parser.add_argument("--clean", 
+                        help="Clean history", 
+                        action="store_true")
+
     parser.add_argument("-w", "--when",
-                        help="When to remind")
+                        help="Reach and notify")
     parser.add_argument("-a", "--after",
-                        help="When to remind")
+                        help="After and notify")
     parser.add_argument("-r", "--repeat", 
                         type=int,
-                        help="repeat")
-    parser.add_argument("content",  nargs='?',
-                        help="content")
+                        help="The times to notify the same message")
+    parser.add_argument("-m", "--message",
+                        help="Message to be notified")
     return parser.parse_args(*arg)
 
 def valid_datetime(year, month, day, hour, minute, second):
@@ -338,27 +507,18 @@ def parse_time(when, after):
         return date2int(now)
 
 
-
 def notify(msg, repeat, threadable = True):
-    """
-    """
-    d2t = {
-        'cinnamon': ['notify-send'],
-    }
-    def __notify():
-        # detect desktop env
-        desktop = os.getenv('DESKTOP_SESSION') + ', ' +os.getenv('XDG_CURRENT_DESKTOP')
-        desktop = desktop.lower()
-        tool = None
-        for d in d2t:
-            if d in desktop:
-                tool = d2t[d]
-                break
-        if not tool:
-            return
+    """ Notify by Tkinter """
+    def __show():
+        root = Tkinter.Tk(className ="reminder")
+        foo = Tkinter.Label(root, text=msg, font=('', 16, "bold"))
+        foo.pack()
+        root.geometry(("%dx%d")%(root.winfo_screenwidth(),root.winfo_screenheight()))
+        root.mainloop()
 
+    def __notify():
         for _ in range(repeat):
-            subprocess.Popen(tool +[msg], stdout=subprocess.PIPE)
+            thread.start_new_thread(__show, ())
             time.sleep(CONFIG['interval'])
 
     if threadable:
@@ -367,144 +527,43 @@ def notify(msg, repeat, threadable = True):
         __notify()
 
 
-
 def get_conn():
-    """
-    """
+    """ Get sqlite connection """
     return sqlite3.connect( CONFIG['dir'] + '/' + CONFIG['dbfile'] )
 
+
 def close_conn(conn):
-    """
-    """
+    """ Close sqlite connection """
     if conn:
         conn.close()
 
-def create_db(conn):
-    """
-    """
-    items_sql = '''
-    CREATE TABLE IF NOT EXISTS items(
-        id       INTEGER PRIMARY KEY AUTOINCREMENT,
-        whento   INTEGER,
-        msg      TEXT,
-        repeat   INTEGER
-    );
-    '''
-
-    history_sql = '''
-    CREATE TABLE IF NOT EXISTS history(
-        id       INTEGER PRIMARY KEY AUTOINCREMENT,
-        whento   INTEGER,
-        msg      TEXT,
-        repeat   INTEGER
-    );
-    '''
-    
-    cur = conn.cursor()    
-    cur.execute(items_sql)
-    cur.execute(history_sql)
-    
-    conn.commit()         
-
-def insert(conn, table, when, msg, repeat):
-    """
-    """
-    sql = "INSERT INTO {0}(whento, msg, repeat) VALUES (?,?,?)".format(table)
-    try:
-        if conn is None:
-            conn = get_conn()
-        
-        cur = conn.cursor()    
-        cur.execute(sql, (when, msg, repeat))
-        
-        conn.commit()           
-        
-    except sqlite3.Error, e:
-        print("Error %s:" % e.args[0])
-        sys.exit(1)
-
-    # finally:
-    #     if conn:
-    #         conn.close()
-
-def select_one(conn):
-    """
-    """
-
-    sql = "SELECT id, whento, msg, repeat FROM {0} ORDER BY whento LIMIT 1".format(ITEMS)
-    try:        
-        cur = conn.cursor()    
-        cur.execute(sql)
-
-        return cur.fetchone()     # 若无数据，返回None，否则返回一个元组            
-        
-    except sqlite3.Error, e:
-        print("Error %s:" % e.args[0])
-        sys.exit(1)
-
-def delete(conn, table, item_id):
-    sql = 'DELETE FROM {0} WHERE id=?'.format(table)
-    cur = conn.cursor()    
-    cur.execute(sql, (item_id,))
-    conn.commit()        
-
-def move(conn, item_id, when, msg, repeat):
-    """
-    """
-    insert(conn, HISTORY, when, msg, repeat)
-    delete(conn, ITEMS, item_id)
-
-def prepare():
-    """ """
-    if not os.path.exists(CONFIG['dir']):
-        os.makedirs(CONFIG['dir'])
-
-class ReminderDaemon(Daemon):
-    def run(self):
-        prepare()
-        conn = get_conn()
-        create_db( conn )
-        try:
-            import setproctitle
-            setproctitle.setproctitle('reminder')
-        except:
-            pass
-
-        while True:
-            item = select_one(conn)
-            if item:
-                item_id, when, msg, repeat = item
-                
-                now = datetime.datetime.now()
-                now = date2int(now)
-
-                if now >= when:  
-                    notify(msg, repeat)
-                    move(conn, item_id, when, msg, repeat)
-
-            time.sleep(CONFIG['sleep'])
-
 
 def main():
-    """
-    """
+    """ I am main """
     pidfile = CONFIG['dir']+'/'+CONFIG['pidfile']
     # print(pidfile)
     reminder = ReminderDaemon(pidfile)
     prepare()
     conn = get_conn()
-    create_db( conn )
+    DB.create_table( conn )
     args = parse_arguments()
+
     if args.start:
         reminder.start()
     elif args.stop:
         reminder.stop()
     elif args.restart:
         reminder.restart()
+    elif args.list:
+        DB.show_all(conn, ITEMS)
+    elif args.history:
+        DB.show_all(conn, HISTORY)
+    elif args.clean:
+        DB.clean_all(conn, HISTORY)
     else:
-        if not args.content:
+        if not args.message:
             raise Exception('The content should be gived')
-        # now, args.content has content
+        # now, args.message has content
         if args.when or args.after:
             when = parse_time(args.when, args.after)
         else:
@@ -513,7 +572,7 @@ def main():
         repeat = CONFIG['repeat']
         if args.repeat:
             repeat = args.repeat
-        insert(conn, ITEMS, when, args.content, repeat)
+        DB.insert(conn, ITEMS, when, as_text(args.message), repeat)
 
     close_conn(conn)
 
