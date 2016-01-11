@@ -25,16 +25,16 @@ class TestReminder(unittest.TestCase):
         args = reminder.parse_arguments(['-r', '5'])
         self.assertEqual(args.repeat, 5)
 
-        args = reminder.parse_arguments(['hello world'])
-        self.assertEqual(args.content, 'hello world')
+        args = reminder.parse_arguments(['-m', 'hello world'])
+        self.assertEqual(args.message, 'hello world')
 
         args = reminder.parse_arguments(['--when', '13h2m', '--after', '360s'])
         self.assertEqual(args.when, '13h2m')
         self.assertEqual(args.after, '360s')
 
-        args = reminder.parse_arguments(['--when', '13h2m', 'hello world'])
+        args = reminder.parse_arguments(['--when', '13h2m', '-m', 'hello world'])
         self.assertEqual(args.when, '13h2m')
-        self.assertEqual(args.content, 'hello world')
+        self.assertEqual(args.message, 'hello world')
 
 
     def test_valid_datetime(self):

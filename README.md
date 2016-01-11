@@ -8,7 +8,9 @@ The data are stored in `~/.reminder/`.
 
 ```
 $ sudo apt-get install python-tk
-$ supported pip install setproctitle
+$ sudo apt-get install python3-tk
+$ sudo pip install setproctitle
+$ sudo pip3 install setproctitle
 $ sudo make install
 ```
 
@@ -17,7 +19,7 @@ $ sudo make install
 $ sudo make uninstall
 ```
 
-## How to Use
+## Usage
 
 #### get help
 ```
@@ -43,6 +45,15 @@ $ reminder --after 12s -m "notify...."
 $ reminder --when 13h0m0s -m "notify...."
 ```
 
+For the values of `--when` and `--after`, 
+* Y -> year
+* M -> month
+* D -> day
+* h -> hour
+* m -> minute
+* s -> second
+The value should be constructed in order. And `second` is must.
+
 #### show all todo items
 ```
 $ reminder --list
@@ -52,6 +63,7 @@ $ reminder --list
 ```
 $ reminder --history
 ```
+
 
 ## Test
 ```
