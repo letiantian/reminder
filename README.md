@@ -1,6 +1,6 @@
 # reminder
 
-**reminder** is a command to show messages at specified time by Tkinter. It can be used as a todo app.
+**reminder** is a command to show messages at specified time by [Tkinter](https://wiki.python.org/moin/TkInter). It can be used as a todo app.
 
 The data are stored in `~/.reminder/`.
 
@@ -52,6 +52,7 @@ For the values of `--when` and `--after`,
 * h -> hour
 * m -> minute
 * s -> second
+
 The value should be constructed in order. And `second` is must.
 
 #### show all todo items
@@ -70,9 +71,6 @@ $ reminder --history
 $ cd test
 $ python -m unittest reminder_test
 ```
-
-## Todo
-Be compatible with python 3.
 
 
 ## License
