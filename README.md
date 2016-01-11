@@ -1,6 +1,6 @@
 # reminder
 
-**reminder** is a tool to show message at specified time. It depends on  notification tool in users's Linux Desktop edition. For example, for `Cinnamon` `notify-send` is used to show notifications.
+**reminder** is a tool to show messages at specified time. It depends on  notification tool in user's Linux Desktop edition. For example, for `Cinnamon` `notify-send` is used to show notifications.
 
 The data are stored in `~/.reminder/`.
 
@@ -18,26 +18,26 @@ $ sudo make uninstall
 
 ## How to Use
 
-### get help
+#### get help
 ```
 $ reminder -h
 ```
-### start daemon
+#### start daemon
 ```
 $ reminder --start
 ```
 
-### stop daemon
+#### stop daemon
 ```
 $ reminder --stop
 ```
 
-### notify after 12s
+#### notify after 12s
 ```
 $ reminder --after 12s "notify...."
 ```
 
-### notify at 13 o'clock
+#### notify at 13 o'clock
 ```
 $ reminder --when 13h0m0s "notify...."
 ```
